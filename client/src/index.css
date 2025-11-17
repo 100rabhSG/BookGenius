@@ -1,0 +1,14 @@
+:root{font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+body{margin:0;background:#f7fafc;color:#0f172a}
+.app{max-width:900px;margin:30px auto;padding:20px}
+header h1{margin:0 0 12px;font-size:20px}
+.questionnaire, .results{background:#fff;border-radius:8px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(2,6,23,0.06)}
+label{display:block;margin-bottom:8px}
+input[type="text"], select{width:100%;padding:8px;margin-top:6px;border:1px solid #e2e8f0;border-radius:6px}
+.buttons{margin-top:12px}
+button{padding:8px 12px;border-radius:8px;border:0;background:#0f172a;color:#fff;margin-right:8px;cursor:pointer}
+.card{border:1px solid #e6eef8;padding:12px;margin-bottom:10px;border-radius:6px;background:#fff}
+.card h3{margin:0 0 6px}
+.author{color:#475569;font-size:13px;margin:0 0 6px}
+.summary{margin:0 0 8px}
+.why,.takeaway{font-size:13px;margin:0 0 6px}
