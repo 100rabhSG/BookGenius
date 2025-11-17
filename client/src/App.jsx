@@ -14,128 +14,181 @@ export default function App(){
   const [loading, setLoading] = useState(false)
   const [recs, setRecs] = useState([])
   const [anonymousId, setAnonymousId] = useState(null)
-  const [debug, setDebug] = useState(null)
+  const [showSaved, setShowSaved] = useState(false)
+
+  // new: saved items state
+  const [savedItems, setSavedItems] = useState([])
+  const [loadingSaved, setLoadingSaved] = useState(false)
 
   useEffect(() => {
-    // ensure anonymousId in localStorage
-    let id = localStorage.getItem('anonymousId')
-    if (!id) {
-      id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
-      localStorage.setItem('anonymousId', id)
-    }
-    setAnonymousId(id)
+	// ensure anonymousId in localStorage
+	let id = localStorage.getItem('anonymousId')
+	if (!id) {
+	  id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
+	  localStorage.setItem('anonymousId', id)
+	}
+	setAnonymousId(id)
   }, [])
 
-  async function getRecommendations(usePrefill=false){
-    setLoading(true)
-    setRecs([])
-    setDebug(null)
-    const payload = {
-      anonymousId,
-      answers: answers,
-      mode: 'concise'
-    }
-    try {
-      const res = await fetch('http://localhost:8080/api/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      const json = await res.json()
-      setRecs(json.recommendations || [])
-      setDebug(json.debug || null)
-    } catch (err) {
-      console.error(err)
-      setRecs([{ title: 'Error', author: '', summary: 'Could not fetch recommendations. Check server.' }])
-    } finally {
-      setLoading(false)
-    }
+  async function getRecommendations(){
+	if (!anonymousId) return alert('anonymousId missing')
+	setLoading(true)
+	setRecs([])
+	const payload = { anonymousId, answers, mode: 'concise' }
+	try {
+	  const res = await fetch('http://localhost:8080/api/recommend', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	  })
+	  const json = await res.json()
+	  setRecs(json.recommendations || [])
+	} catch (err) {
+	  console.error(err)
+	  setRecs([{ title: 'Error', summary: 'Could not fetch recommendations. Check server.' }])
+	} finally {
+	  setLoading(false)
+	}
+  }
+
+  // new: fetch saved items from backend
+  async function fetchSaved(){
+	if (!anonymousId) return alert('anonymousId missing')
+	setLoadingSaved(true)
+	try {
+	  const url = `http://localhost:8080/api/list?anonymousId=${encodeURIComponent(anonymousId)}`
+	  const res = await fetch(url)
+	  const json = await res.json()
+	  setSavedItems(json.items || [])
+	} catch (err) {
+	  console.error('fetchSaved error', err)
+	  alert('Failed to fetch saved items')
+	} finally {
+	  setLoadingSaved(false)
+	}
+  }
+
+  // update Save button logic to refresh saved list after saving
+  async function handleSave(recommendation){
+	try{
+	  const res = await fetch('http://localhost:8080/api/save', {
+		method: 'POST',
+		headers: {'Content-Type':'application/json'},
+		body: JSON.stringify({ anonymousId, recommendation })
+	  })
+	  const j = await res.json()
+	  if (j.savedId) {
+		// refresh saved list
+		fetchSaved()
+		alert('Saved!')
+	  } else {
+		console.warn('save response', j)
+		alert('Save response unexpected')
+	  }
+	} catch(e){
+	  console.error(e)
+	  alert('Save failed')
+	}
   }
 
   return (
-    <div className="app">
-      <header>
-        <h1>BookGenius — AI Book Recommender (Mock)</h1>
-      </header>
+	<div className="app">
+	  <header>
+		<h1>BookGenius - AI Book Recommender</h1>
+	  </header>
 
-      <main>
-        <section className="questionnaire">
-          <h2>Quick questionnaire</h2>
-          <label>
-            Goal:
-            <select value={answers.goals} onChange={(e)=>setAnswers({...answers, goals: e.target.value})}>
-              <option>Learn a skill</option>
-              <option>Career growth</option>
-              <option>Improve mindset</option>
-              <option>Relax/entertainment</option>
-            </select>
-          </label>
+	  <main>
+		<section className="questionnaire">
+		  <h2>Quick questionnaire</h2>
+		  <label>
+			Goal:
+			<select value={answers.goals} onChange={(e)=>setAnswers({...answers, goals: e.target.value})}>
+			  <option>Learn a skill</option>
+			  <option>Career growth</option>
+			  <option>Improve mindset</option>
+			  <option>Relax/entertainment</option>
+			</select>
+		  </label>
 
-          <label>
-            Mood:
-            <select value={answers.mood} onChange={(e)=>setAnswers({...answers, mood: e.target.value})}>
-              <option>Motivational</option>
-              <option>Calm & reflective</option>
-              <option>Fast & entertaining</option>
-              <option>Deep & thought-provoking</option>
-            </select>
-          </label>
+		  <label>
+			Mood:
+			<select value={answers.mood} onChange={(e)=>setAnswers({...answers, mood: e.target.value})}>
+			  <option>Motivational</option>
+			  <option>Calm & reflective</option>
+			  <option>Fast & entertaining</option>
+			  <option>Deep & thought-provoking</option>
+			</select>
+		  </label>
 
-          <label>
-            Context (one line):
-            <input type="text" value={answers.context} onChange={(e)=>setAnswers({...answers, context: e.target.value})} />
-          </label>
+		  <label>
+			Context (one line):
+			<input type="text" value={answers.context} onChange={(e)=>setAnswers({...answers, context: e.target.value})} />
+		  </label>
 
-          <div className="buttons">
-            <button onClick={()=>getRecommendations()} disabled={loading}>
-              {loading ? 'Loading…' : 'Get Recommendations'}
-            </button>
-            <button onClick={()=>{ setAnswers(DEFAULT_ANSWERS); getRecommendations(true) }} disabled={loading}>
-              Prefill Demo
-            </button>
-          </div>
-        </section>
+		  <div className="buttons">
+			<button onClick={()=>getRecommendations()} disabled={loading}>
+			  {loading ? 'Loading…' : 'Get Recommendations'}
+			</button>
+			<button
+				onClick={async () => {
+					await fetchSaved();
+					setShowSaved(true);
+				}}
+				disabled={loadingSaved}
+				style={{ background: '#065f46' }}
+				>
+				{loadingSaved ? 'Loading saved…' : 'My Saved Books'}
+				</button>
+		  </div>
+		</section>
 
-        <section className="results">
-          <h2>Recommendations</h2>
-          {loading && <div className="skeleton">Loading recommendations…</div>}
-          {!loading && recs.length===0 && <div>No recommendations yet.</div>}
-          <div className="cards">
-            {recs.map((r, i) => (
-              <article key={i} className="card">
-                <h3>{r.title}</h3>
-                <p className="author">{r.author}</p>
-                <p className="summary">{r.summary}</p>
-                {r.why && <p className="why"><strong>Why:</strong> {r.why}</p>}
-                {r.takeaway && <p className="takeaway"><strong>Takeaway:</strong> {r.takeaway}</p>}
-                <div className="card-actions">
-                  <button onClick={async ()=>{
-                    try{
-                      await fetch('http://localhost:8080/api/save', {
-                        method: 'POST',
-                        headers: {'Content-Type':'application/json'},
-                        body: JSON.stringify({ anonymousId, recommendation: r })
-                      })
-                      alert('Saved!')
-                    }catch(e){ alert('Save failed') }
-                  }}>Save</button>
-                </div>
-              </article>
-            ))}
-          </div>
+		<section className="results" style={{backgroundColor: '#e0dedeff'}}>
+		  <h2>Recommendations</h2>
+		  {loading && <div className="skeleton">Loading recommendations…</div>}
+		  {!loading && recs.length===0 && <div>No recommendations yet.</div>}
+		  <div className="cards">
+			{recs.map((r, i) => (
+			  <article key={i} className="card">
+				<h3>{r.title}</h3>
+				<p className="author">{r.author}</p>
+				<p className="summary">{r.summary}</p>
+				{r.why && <p className="why"><strong>Why:</strong> {r.why}</p>}
+				{r.takeaway && <p className="takeaway"><strong>Takeaway:</strong> {r.takeaway}</p>}
+				<div className="card-actions">
+				  <button onClick={()=>handleSave(r)}>Save</button>
+				</div>
+			  </article>
+			))}
+		  </div>
+		</section>
 
-          {debug && (
-            <details style={{marginTop:12}}>
-              <summary>Debug (mock)</summary>
-              <pre style={{whiteSpace:'pre-wrap'}}>{JSON.stringify(debug, null, 2)}</pre>
-            </details>
-          )}
-        </section>
-      </main>
-
-      <footer>
-        <small>Local demo — Frontend calls local server at <code>http://localhost:8080</code></small>
-      </footer>
-    </div>
+		{/* new: reading list section */}
+		{showSaved && (
+			<section className="results">
+				<h2>Reading List</h2>
+				{loadingSaved && <div>Loading saved books…</div>}
+				{!loadingSaved && savedItems.length===0 && (
+					<div>No saved books yet. Click "Save" on a recommendation.</div>
+				)}
+				<div className="cards">
+				{savedItems.map((s) => (
+					<article key={s.id} className="card">
+					<h3>{s.recommendation?.title}</h3>
+					<p className="author">{s.recommendation?.author}</p>
+					<p className="summary">{s.recommendation?.summary}</p>
+					<p style={{fontSize:12,color:'#6b7280'}}>
+						Saved at: {new Date(s.createdAt).toLocaleString()}
+					</p>
+					</article>
+				))}
+				</div>
+			</section>
+		)}
+	  </main>
+{/* 
+	  <footer>
+		<small>Local demo — Frontend calls local server at <code>http://localhost:8080</code></small>
+	  </footer> */}
+	</div>
   )
 }

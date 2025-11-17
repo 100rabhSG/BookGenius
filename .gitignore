@@ -1,2 +1,3 @@
 server/firestore-service-account.json
 node_modules/
+/server/.env
