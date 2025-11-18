@@ -1,10 +1,9 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
 const { z } = require('zod');
 const admin = require('firebase-admin');
 const serviceAccount = require('../firestore-service-account.json');
+const fetch = require('node-fetch');
 
 const loadedKey = process.env.GEMINI_API_KEY || '(none)';
 const loadedUrl = process.env.GEMINI_API_URL || '(none)';
@@ -80,7 +79,7 @@ const FALLBACK_RECS = [
 
 
 //Health check
-app.get('/healthz', (req, res) => {
+app.get('/', (req, res) => {
 	res.status(200).json({ status: 'ok' });
 });
 
@@ -395,6 +394,7 @@ function tryParseModelOutput(text) {
  */
 // Replace your existing POST /api/recommend handler with this block
 app.post('/api/recommend', async (req, res) => {
+    const { v4: uuidv4 } = await import('uuid');
 	const { anonymousId = uuidv4(), answers = {}, mode = 'concise' } = req.body || {};
 
 	// Build main prompt from existing function
