@@ -36,7 +36,7 @@ export default function App(){
 	setRecs([])
 	const payload = { anonymousId, answers, mode: 'concise' }
 	try {
-	  const res = await fetch('http://localhost:8080/api/recommend', {
+	  const res = await fetch('https://bookgenius-server-gaqvrurloq-uc.a.run.app/api/recommend', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(payload)
@@ -56,7 +56,7 @@ export default function App(){
 	if (!anonymousId) return alert('anonymousId missing')
 	setLoadingSaved(true)
 	try {
-	  const url = `http://localhost:8080/api/list?anonymousId=${encodeURIComponent(anonymousId)}`
+	  const url = `https://bookgenius-server-gaqvrurloq-uc.a.run.app/api/list?anonymousId=${encodeURIComponent(anonymousId)}`
 	  const res = await fetch(url)
 	  const json = await res.json()
 	  setSavedItems(json.items || [])
@@ -71,7 +71,7 @@ export default function App(){
   // update Save button logic to refresh saved list after saving
   async function handleSave(recommendation){
 	try{
-	  const res = await fetch('http://localhost:8080/api/save', {
+	  const res = await fetch('https://bookgenius-server-gaqvrurloq-uc.a.run.app/api/save', {
 		method: 'POST',
 		headers: {'Content-Type':'application/json'},
 		body: JSON.stringify({ anonymousId, recommendation })
@@ -187,7 +187,7 @@ export default function App(){
 	  </main>
 {/* 
 	  <footer>
-		<small>Local demo — Frontend calls local server at <code>http://localhost:8080</code></small>
+		<small>Local demo — Frontend calls local server at <code>https://bookgenius-server-gaqvrurloq-uc.a.run.app/</code></small>
 	  </footer> */}
 	</div>
   )
