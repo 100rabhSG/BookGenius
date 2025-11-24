@@ -1,24 +1,25 @@
 import { useState, useEffect } from 'react'
+import { moodOptions, readingPurposeOptions, genreOptions, readingStyleOptions, lengthOptions} from './data/options.js'
 import './App.css'
 
 const DEFAULT_ANSWERS = {
-  goals: 'Learn a skill',
-  genres: ['Non-fiction'],
-  mood: 'Motivational',
-  context: 'Junior engineer',
-  booksLoved: ['Atomic Habits']
+	mood: 'Motivational',
+	goals: 'Learn a skill',
+	genre: 'Fiction',
+	readingStyle: 'Simple & easy to follow',
+	length: 'Short',
 }
 
 export default function App(){
-  const [answers, setAnswers] = useState(DEFAULT_ANSWERS)
-  const [loading, setLoading] = useState(false)
-  const [recs, setRecs] = useState([])
-  const [anonymousId, setAnonymousId] = useState(null)
-  const [showSaved, setShowSaved] = useState(false)
+	const [answers, setAnswers] = useState(DEFAULT_ANSWERS)
+	const [loading, setLoading] = useState(false)
+	const [recs, setRecs] = useState([])
+	const [anonymousId, setAnonymousId] = useState(null)
+	const [showSaved, setShowSaved] = useState(false)
 
-  // new: saved items state
-  const [savedItems, setSavedItems] = useState([])
-  const [loadingSaved, setLoadingSaved] = useState(false)
+	// saved items state
+	const [savedItems, setSavedItems] = useState([])
+	const [loadingSaved, setLoadingSaved] = useState(false)
 
   useEffect(() => {
 	// ensure anonymousId in localStorage
@@ -32,11 +33,13 @@ export default function App(){
 
   async function getRecommendations(){
 	if (!anonymousId) return alert('anonymousId missing')
+
 	setLoading(true)
 	setRecs([])
 	const payload = { anonymousId, answers, mode: 'concise' }
+
 	try {
-	  const res = await fetch('https://bookgenius-server-gaqvrurloq-uc.a.run.app/api/recommend', {
+	  const res = await fetch('http://localhost:8080/api/recommend', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(payload)
@@ -51,12 +54,13 @@ export default function App(){
 	}
   }
 
-  // new: fetch saved items from backend
+  // fetch saved items from backend
   async function fetchSaved(){
 	if (!anonymousId) return alert('anonymousId missing')
+
 	setLoadingSaved(true)
 	try {
-	  const url = `https://bookgenius-server-gaqvrurloq-uc.a.run.app/api/list?anonymousId=${encodeURIComponent(anonymousId)}`
+	  const url = `http://localhost:8080/api/list?anonymousId=${encodeURIComponent(anonymousId)}`
 	  const res = await fetch(url)
 	  const json = await res.json()
 	  setSavedItems(json.items || [])
@@ -68,10 +72,10 @@ export default function App(){
 	}
   }
 
-  // update Save button logic to refresh saved list after saving
+  // refresh saved list after saving
   async function handleSave(recommendation){
 	try{
-	  const res = await fetch('https://bookgenius-server-gaqvrurloq-uc.a.run.app/api/save', {
+	  const res = await fetch('http://localhost:8080/api/save', {
 		method: 'POST',
 		headers: {'Content-Type':'application/json'},
 		body: JSON.stringify({ anonymousId, recommendation })
@@ -99,35 +103,55 @@ export default function App(){
 
 	  <main>
 		<section className="questionnaire">
-		  <h2>Quick questionnaire</h2>
-		  <label>
-			Goal:
-			<select value={answers.goals} onChange={(e)=>setAnswers({...answers, goals: e.target.value})}>
-			  <option>Learn a skill</option>
-			  <option>Career growth</option>
-			  <option>Improve mindset</option>
-			  <option>Relax/entertainment</option>
-			</select>
-		  </label>
-
-		  <label>
+			<h2>Quick questionnaire</h2>
+			<label>
 			Mood:
 			<select value={answers.mood} onChange={(e)=>setAnswers({...answers, mood: e.target.value})}>
-			  <option>Motivational</option>
-			  <option>Calm & reflective</option>
-			  <option>Fast & entertaining</option>
-			  <option>Deep & thought-provoking</option>
+				{moodOptions.map((mood) => (
+					<option key={mood} value={mood}>{mood}</option>
+				))}
 			</select>
-		  </label>
+			</label>
 
-		  <label>
-			Context (one line):
-			<input type="text" value={answers.context} onChange={(e)=>setAnswers({...answers, context: e.target.value})} />
-		  </label>
+			<label>
+			Goal:
+			<select value={answers.goals} onChange={(e)=>setAnswers({...answers, goals: e.target.value})}>
+				{readingPurposeOptions.map((goal) => (
+					<option key={goal} value={goal}>{goal}</option>
+				))}
+			</select>
+			</label>
 
-		  <div className="buttons">
+			<label>
+			Genre:
+			<select value={answers.genre} onChange={(e)=>setAnswers({...answers, genre: e.target.value})}>
+				{genreOptions.map((genre) => (
+					<option key={genre} value={genre}>{genre}</option>
+				))}
+			</select>
+			</label>
+
+			<label>
+			Reading Style:
+			<select value={answers.readingStyle} onChange={(e)=>setAnswers({...answers, readingStyle: e.target.value})}>
+				{readingStyleOptions.map((style) => (
+					<option key={style} value={style}>{style}</option>
+				))}
+			</select>
+			</label>
+
+			<label>
+			Length Preference:
+			<select value={answers.length} onChange={(e)=>setAnswers({...answers, length: e.target.value})}>
+				{lengthOptions.map((length) => (
+					<option key={length} value={length}>{length}</option>
+				))}
+			</select>
+			</label>
+
+			<div className="buttons">
 			<button onClick={()=>getRecommendations()} disabled={loading}>
-			  {loading ? 'Loading…' : 'Get Recommendations'}
+				{loading ? 'Loading…' : 'Get Recommendations'}
 			</button>
 			<button
 				onClick={async () => {
@@ -139,7 +163,7 @@ export default function App(){
 				>
 				{loadingSaved ? 'Loading saved…' : 'My Saved Books'}
 				</button>
-		  </div>
+			</div>
 		</section>
 
 		<section className="results" style={{backgroundColor: '#e0dedeff'}}>
@@ -187,7 +211,7 @@ export default function App(){
 	  </main>
 {/* 
 	  <footer>
-		<small>Local demo — Frontend calls local server at <code>https://bookgenius-server-gaqvrurloq-uc.a.run.app/</code></small>
+		<small>Local demo — Frontend calls local server at <code>http://localhost:8080/</code></small>
 	  </footer> */}
 	</div>
   )
