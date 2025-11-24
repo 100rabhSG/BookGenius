@@ -387,7 +387,7 @@ app.post('/api/recommend', async (req, res) => {
 
 	try {
 		// 1) First attempt - very low temperature for deterministic JSON
-		const { parsed: parsed1, raw: raw1 } = await attemptModelCall(prompt, 0.0);
+		const { parsed: parsed1, raw: raw1 } = await attemptModelCall(prompt, 0.20);
 
 		if (parsed1) {
 			return res.json({
