@@ -176,8 +176,12 @@ export default function App(){
 				<h3>{r.title}</h3>
 				<p className="author">{r.author}</p>
 				<p className="summary">{r.summary}</p>
-				{r.why && <p className="why"><strong>Why:</strong> {r.why}</p>}
-				{r.takeaway && <p className="takeaway"><strong>Takeaway:</strong> {r.takeaway}</p>}
+				{r.reason && <p className="why"><strong>Why:</strong> {r.reason}</p>}
+				{r.tags && (
+					<p className="takeaway">
+						<strong>Tags:</strong> {Array.isArray(r.tags) ? r.tags.join(', ') : r.tags}
+					</p>
+				)}
 				<div className="card-actions">
 				  <button onClick={()=>handleSave(r)}>Save</button>
 				</div>
@@ -199,7 +203,12 @@ export default function App(){
 					<article key={s.id} className="card">
 					<h3>{s.recommendation?.title}</h3>
 					<p className="author">{s.recommendation?.author}</p>
-					<p className="summary">{s.recommendation?.summary}</p>
+					<p className="summary">{s.recommendation?.reason}</p>
+					{s.recommendation?.tags && (
+						<p className="takeaway">
+							<strong>Tags:</strong> {Array.isArray(s.recommendation?.tags) ? s.recommendation?.tags.join(', ') : s.recommendation?.tags}
+						</p>
+					)}
 					<p style={{fontSize:12,color:'#6b7280'}}>
 						Saved at: {new Date(s.createdAt).toLocaleString()}
 					</p>
