@@ -1,10 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const envPath = path.resolve(__dirname, '..', '.env');
-// console.log('Loading env from:', envPath, 'exists:', fs.existsSync(envPath));
 require('dotenv').config({ path: envPath });
-
-// console.log('GEMINI_API_KEY present?', !!process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY ? `${process.env.GEMINI_API_KEY.slice(0,4)}...${process.env.GEMINI_API_KEY.slice(-4)}` : null);
 
 const express = require('express');
 const cors = require('cors');
@@ -12,12 +9,6 @@ const { z } = require('zod');
 const admin = require('firebase-admin');
 const serviceAccount = require('../firestore-service-account.json');
 const fetch = require('node-fetch');
-
-const loadedKey = process.env.GEMINI_API_KEY || '(none)';
-const loadedUrl = process.env.GEMINI_API_URL || '(none)';
-console.log('ENV: GEMINI_API_KEY set?', !!loadedKey && loadedKey !== '(none)' ? 'YES' : 'NO');
-// console.log('ENV: GEMINI_API_URL =', loadedUrl);
-
 
 const app = express();
 app.use(cors());
@@ -78,10 +69,7 @@ app.get('/', (req, res) => {
 	res.status(200).json({ status: 'ok' });
 });
 
-/**
- * Build the prompt string for Gemini.
- * We use a SYSTEM + USER style prompt and require JSON-only output.
- */
+//Build the prompt string for Gemini.
 function buildPrompt(answers) {
 	const userBlock = JSON.stringify(
 		{
@@ -142,7 +130,7 @@ async function callModelAPI(promptText, options = {}) {
 	const makeBody = () => ({
 		contents: [{ role: 'user', parts: [{ text: promptText }] }],
 		generationConfig: {
-			temperature: options.temperature ?? 0.12, // lower for deterministic JSON
+			temperature: options.temperature ?? 0.2, // lower for deterministic JSON
 			candidateCount: options.candidateCount ?? 1,
 			maxOutputTokens: options.maxOutputTokens ?? parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS || '1200', 10)
 		}
@@ -190,9 +178,7 @@ async function callModelAPI(promptText, options = {}) {
 	// Try primary
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			console.log(`callModelAPI: primary POST attempt ${attempt}`);
 			const raw = await postToUrl(primaryUrl);
-			// after calling postToUrl(...) and computing `text`:
 			const parsedText = (typeof raw === 'string') ? raw : extract(raw);
 
 			// consider tiny/empty responses transient
@@ -203,7 +189,6 @@ async function callModelAPI(promptText, options = {}) {
 				throw err; // trigger retry/failover logic
 			}
 
-			// otherwise return
 			return parsedText;
 		} catch (err) {
 			const status = err.status || 0;
@@ -212,7 +197,6 @@ async function callModelAPI(promptText, options = {}) {
 			if (!isTransient) throw err;
 			if (attempt === maxAttempts) break;
 			const delay = baseDelayMs * Math.pow(2, attempt - 1) + jitter(attempt);
-			console.log(`callModelAPI: waiting ${delay}ms before retry`);
 			await new Promise(r => setTimeout(r, delay));
 		}
 	}
@@ -220,10 +204,8 @@ async function callModelAPI(promptText, options = {}) {
 	// Try failover once
 	if (failoverUrl) {
 		try {
-			console.log('callModelAPI: trying failover model');
 			const raw2 = await postToUrl(failoverUrl);
 			const text2 = (typeof raw2 === 'string') ? raw2 : extract(raw2);
-			console.log('callModelAPI: failover success');
 			return text2;
 		} catch (err2) {
 			console.error('callModelAPI: failover failed:', err2.message);
@@ -239,7 +221,6 @@ async function callModelAPI(promptText, options = {}) {
 
 //  Try to parse & validate model text into our schema. Returns parsed object on success, null on failure.
 function tryParseModelOutput(text) {
-	console.log('text: ', text);
   if (!text || typeof text !== 'string') return null;
   const raw = text.replace(/\r\n/g, '\n');
 
@@ -367,7 +348,6 @@ app.post('/api/recommend', async (req, res) => {
 		try {
 			const raw = await callModelAPI(promptText, { temperature, maxOutputTokens: 800 }); // getting successful response from here (raw)
 			// log for debugging (first 1200 chars)
-			// console.log('Model raw response preview:', (raw || '').slice(0, 1200));
 			const parsed = tryParseModelOutput(raw);
 			return { parsed, raw };
 		} catch (err) {
@@ -465,7 +445,6 @@ app.post('/api/save', async (req, res) => {
 
 // ---- List endpoint using Firestore ----
 app.get('/api/list', async (req, res) => {
-	// console.log('List request received with query:', req.query);
 	try {
 		const { anonymousId } = req.query || {};
 		if (!anonymousId) return res.status(400).json({ error: 'missing anonymousId' });

@@ -218,10 +218,6 @@ export default function App(){
 			</section>
 		)}
 	  </main>
-{/* 
-	  <footer>
-		<small>Local demo — Frontend calls local server at <code>https://bookgenius-server-gaqvrurloq-uc.a.run.app/</code></small>
-	  </footer> */}
 	</div>
   )
 }
