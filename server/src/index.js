@@ -1,15 +1,14 @@
+const path = require('path');
+const fs = require('fs');
+const envPath = path.resolve(__dirname, '..', '.env');
+require('dotenv').config({ path: envPath });
+
 const express = require('express');
 const cors = require('cors');
 const { z } = require('zod');
 const admin = require('firebase-admin');
 const serviceAccount = require('../firestore-service-account.json');
 const fetch = require('node-fetch');
-
-const loadedKey = process.env.GEMINI_API_KEY || '(none)';
-const loadedUrl = process.env.GEMINI_API_URL || '(none)';
-console.log('ENV: GEMINI_API_KEY set?', !!loadedKey && loadedKey !== '(none)' ? 'YES' : 'NO');
-console.log('ENV: GEMINI_API_URL =', loadedUrl);
-
 
 const app = express();
 app.use(cors());
@@ -26,7 +25,6 @@ const PORT = process.env.PORT || 8080;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_API_URL =
 	process.env.GEMINI_API_URL ||
-	// Keep this a placeholder so you configure the real endpoint in env.
 	'https://api.example.com/v1/generate';
 
 	
@@ -34,11 +32,8 @@ const GEMINI_API_URL =
 const RecommendationSchema = z.object({
 	title: z.string(),
 	author: z.string().optional().or(z.literal('')).optional(),
-	summary: z.string(),
 	why: z.string().optional(),
-	takeaway: z.string().optional(),
-	estimated_reading_time: z.string().optional(),
-	tags: z.array(z.string()).optional()
+	tags: z.array(z.string()).optional(),
 });
 
 const ModelResponseSchema = z.object({
@@ -51,28 +46,19 @@ const FALLBACK_RECS = [
 	{
 		title: 'Atomic Habits',
 		author: 'James Clear',
-		summary: 'Practical guide to habit building and incremental improvement.',
 		why: 'Proven, actionable advice for habit formation.',
-		takeaway: 'Small daily changes compound into major improvements.',
-		estimated_reading_time: '6-8 hours',
 		tags: ['habits', 'productivity']
 	},
 	{
 		title: 'Clean Code',
 		author: 'Robert C. Martin',
-		summary: 'Best practices and principles for writing maintainable code.',
 		why: 'Great for engineers focusing on code quality and craftsmanship.',
-		takeaway: 'Write readable code; design for maintainability.',
-		estimated_reading_time: '8-10 hours',
 		tags: ['software', 'engineering']
 	},
 	{
 		title: 'Deep Work',
 		author: 'Cal Newport',
-		summary: 'Techniques to focus deeply and produce high-quality output.',
 		why: 'Useful for people seeking better concentration and productivity.',
-		takeaway: 'Block distraction; schedule focused work sessions.',
-		estimated_reading_time: '6-8 hours',
 		tags: ['focus', 'productivity']
 	}
 ];
@@ -83,19 +69,15 @@ app.get('/', (req, res) => {
 	res.status(200).json({ status: 'ok' });
 });
 
-/**
- * Build the prompt string for Gemini.
- * We use a SYSTEM + USER style prompt and require JSON-only output.
- */
+//Build the prompt string for Gemini.
 function buildPrompt(answers) {
 	const userBlock = JSON.stringify(
 		{
+			mood: answers.mood || '',
 			goals: answers.goals || '',
 			genres: answers.genres || [],
-			mood: answers.mood || '',
-			context: answers.context || '',
-			booksLoved: answers.booksLoved || [],
-			formatPref: answers.formatPref || ''
+			readingStyle: answers.readingStyle || '',
+			length: answers.length || '',	
 		},
 		null,
 		2
@@ -103,60 +85,36 @@ function buildPrompt(answers) {
 
 	// We force JSON-only output, give a compact schema and a minimal example.
 	return `SYSTEM:
-	You are an expert book recommender. ***IMPORTANT:*** You MUST respond with valid JSON ONLY and NOTHING ELSE. Do not include any extra commentary, explanation, or Markdown outside the JSON. If you must provide JSON inside code fences, the server will extract it; however prefer plain JSON text.
+	You are BookGenius, an expert AI that recommends books based strictly on user preferences. 
+	Respond ONLY with valid JSON that matches the exact schema below. No explanations, no prose, no intro/outro text.
 
-	USER:
-	${userBlock}
-
-	RESPONSE FORMAT:
-	Return a single JSON object with a "recommendations" array (length 1-3). Each recommendation must have:
-	- title (string)
-	- author (string or empty)
-	- summary (string, max ~30 words)
-	- why (string, 1-2 sentences referencing user's inputs)
-	- takeaway (string, one-line)
-	- estimated_reading_time (string)
-	- tags (array of short strings)
-
-	Exact JSON schema example (must follow this shape):
+	STRICT OUTPUT SCHEMA (must follow exactly):
 	{
 		"recommendations": [
 			{
-				"title": "Book Title",
-				"author": "Author Name",
-				"summary": "Brief summary here.",
-				"why": "Why this fits the user's inputs.",
-				"takeaway": "One-line takeaway",
-				"estimated_reading_time": "6-8 hours",
-				"tags": ["tag1","tag2"]
+			"title": "string",
+			"author": "string",
+			"reason": "string (max 120 characters)",
+			"tags": ["string"]
 			}
 		]
 	}
 
-	INSTRUCTIONS:
-	1) Output ONLY valid JSON. If you cannot follow the schema, return an empty "recommendations": [].
-	2) Keep fields concise.
-	3) If you attempt anything other than JSON, the server will ask you to RETURN VALID JSON ONLY and we will retry once.
-	4) Use the user's inputs above to justify the "why" text briefly.
+	RESPONSE RULES:
+	- Return an object with a "books" array.
+	- Include a maximum of 3 books.
+	- Each book must include: "title", "author", "reason", "short summary".
+	- "reason" must be concise (max 100 characters).
+	- "summary" must be brief (max 120 characters).
+	- Total response must be under 1200 characters.
+	- Recommendations must strongly match mood, purpose, style, and genres.
 
-	Generate the JSON now.`;
+	USER PREFERENCES:
+	${userBlock}
+
+	INSTRUCTIONS: Recommend books that best match the user's preferences and return them in the exact JSON schema above.`;
 }
 
-
-/**
- * Call the Gemini-like API.
- * - Assumes the model returns text content which is JSON (we try to parse)
- * - This wrapper performs a single HTTP POST and returns the raw text content
- */
-/**
- * Robust callModelAPI with retry/backoff + optional failover model.
- *
- * Behavior:
- * - Tries primary model URL (process.env.GEMINI_API_URL).
- * - On transient errors (429/500/502/503) it retries with exponential backoff + jitter.
- * - If retries exhaust, optionally swaps to a failover model URL (GEMINI_FAILOVER_MODEL env or derived).
- * - Returns string content (best-effort extraction) or throws with detailed err.details.
- */
 async function callModelAPI(promptText, options = {}) {
 	const key = process.env.GEMINI_API_KEY;
 	if (!key) throw new Error('GEMINI_API_KEY not set in environment');
@@ -165,14 +123,14 @@ async function callModelAPI(promptText, options = {}) {
 	if (!primaryUrl) throw new Error('GEMINI_API_URL not set in environment');
 
 	const failoverUrl = process.env.GEMINI_FAILOVER_URL || null;
-	const maxAttempts = parseInt(process.env.GEMINI_RETRY_ATTEMPTS || '5', 10);
+	const maxAttempts = parseInt(process.env.GEMINI_RETRY_ATTEMPTS || '2', 10);
 	const baseDelayMs = 800; // larger base delay to reduce hammering
 	const jitter = (n) => Math.floor(Math.random() * (n * 200)); // jitter scale
 
 	const makeBody = () => ({
 		contents: [{ role: 'user', parts: [{ text: promptText }] }],
 		generationConfig: {
-			temperature: options.temperature ?? 0.12, // lower for deterministic JSON
+			temperature: options.temperature ?? 0.2, // lower for deterministic JSON
 			candidateCount: options.candidateCount ?? 1,
 			maxOutputTokens: options.maxOutputTokens ?? parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS || '1200', 10)
 		}
@@ -180,6 +138,7 @@ async function callModelAPI(promptText, options = {}) {
 
 	const extract = (json) => {
 		if (!json) return null;
+
 		if (json.candidates && Array.isArray(json.candidates) && json.candidates[0]) {
 			const cand = json.candidates[0];
 			if (typeof cand.content === 'string') return cand.content;
@@ -219,9 +178,7 @@ async function callModelAPI(promptText, options = {}) {
 	// Try primary
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			console.log(`callModelAPI: primary POST attempt ${attempt}`);
 			const raw = await postToUrl(primaryUrl);
-			// after calling postToUrl(...) and computing `text`:
 			const parsedText = (typeof raw === 'string') ? raw : extract(raw);
 
 			// consider tiny/empty responses transient
@@ -232,7 +189,6 @@ async function callModelAPI(promptText, options = {}) {
 				throw err; // trigger retry/failover logic
 			}
 
-			// otherwise return
 			return parsedText;
 		} catch (err) {
 			const status = err.status || 0;
@@ -241,7 +197,6 @@ async function callModelAPI(promptText, options = {}) {
 			if (!isTransient) throw err;
 			if (attempt === maxAttempts) break;
 			const delay = baseDelayMs * Math.pow(2, attempt - 1) + jitter(attempt);
-			console.log(`callModelAPI: waiting ${delay}ms before retry`);
 			await new Promise(r => setTimeout(r, delay));
 		}
 	}
@@ -249,10 +204,8 @@ async function callModelAPI(promptText, options = {}) {
 	// Try failover once
 	if (failoverUrl) {
 		try {
-			console.log('callModelAPI: trying failover model');
 			const raw2 = await postToUrl(failoverUrl);
 			const text2 = (typeof raw2 === 'string') ? raw2 : extract(raw2);
-			console.log('callModelAPI: failover success');
 			return text2;
 		} catch (err2) {
 			console.error('callModelAPI: failover failed:', err2.message);
@@ -266,9 +219,7 @@ async function callModelAPI(promptText, options = {}) {
 }
 
 
-/**
- * Try to parse & validate model text into our schema. Returns parsed object on success, null on failure.
- */
+//  Try to parse & validate model text into our schema. Returns parsed object on success, null on failure.
 function tryParseModelOutput(text) {
   if (!text || typeof text !== 'string') return null;
   const raw = text.replace(/\r\n/g, '\n');
@@ -335,7 +286,7 @@ function tryParseModelOutput(text) {
       : (Array.isArray(parsed) ? parsed : null);
     if (!items || items.length === 0) return null;
     const valid = items
-      .filter(it => it && typeof it.title === 'string' && typeof it.summary === 'string')
+      .filter(it => it && typeof it.title === 'string' && typeof it.author === 'string')
       .slice(0, 3);
     if (valid.length === 0) return null;
     return { recommendations: valid };
@@ -385,14 +336,6 @@ function tryParseModelOutput(text) {
 
 
 
-/**
- * POST /api/recommend
- * - builds prompt
- * - calls model
- * - validates and retries once on failure
- * - returns recommendations (or fallback)
- */
-// Replace your existing POST /api/recommend handler with this block
 app.post('/api/recommend', async (req, res) => {
     const { v4: uuidv4 } = await import('uuid');
 	const { anonymousId = uuidv4(), answers = {}, mode = 'concise' } = req.body || {};
@@ -403,9 +346,8 @@ app.post('/api/recommend', async (req, res) => {
 	// small helper to attempt model call + parse
 	async function attemptModelCall(promptText, temperature = 0.0) {
 		try {
-			const raw = await callModelAPI(promptText, { temperature, maxOutputTokens: 800 });
+			const raw = await callModelAPI(promptText, { temperature, maxOutputTokens: 800 }); // getting successful response from here (raw)
 			// log for debugging (first 1200 chars)
-			console.log('Model raw response preview:', (raw || '').slice(0, 1200));
 			const parsed = tryParseModelOutput(raw);
 			return { parsed, raw };
 		} catch (err) {
@@ -425,7 +367,7 @@ app.post('/api/recommend', async (req, res) => {
 
 	try {
 		// 1) First attempt - very low temperature for deterministic JSON
-		const { parsed: parsed1, raw: raw1 } = await attemptModelCall(prompt, 0.0);
+		const { parsed: parsed1, raw: raw1 } = await attemptModelCall(prompt, 0.20);
 
 		if (parsed1) {
 			return res.json({
@@ -437,18 +379,18 @@ app.post('/api/recommend', async (req, res) => {
 		// 2) Second attempt (corrective): explicit instruction to return valid JSON only
 		const correctivePrompt = [
 			'IMPORTANT: Your previous output was invalid. Return ONLY valid JSON matching the schema EXACTLY (no commentary, no markdown).',
-			'Schema: {"recommendations":[{ "title": "string", "author":"string","summary":"string","why":"string","takeaway":"string","estimated_reading_time":"string","tags":["string"] }]}',
+			'Schema: {"recommendations": [{"title": "string","author": "string","reason": "string (max 120 characters)","tags": ["string"]}]}',
 			'Return an object with up to 3 recommendations that match the schema above.',
 			'Now produce the JSON only:'
 		].join(' ');
 
 		// We combine corrective instruction + the original user block to keep context
 		const retryPrompt = `${correctivePrompt}\n\nUSER_CONTEXT:\n${JSON.stringify({
+			mood: answers.mood || '',
 			goals: answers.goals || '',
 			genres: answers.genres || [],
-			mood: answers.mood || '',
-			context: answers.context || '',
-			booksLoved: answers.booksLoved || []
+			readingStyle: answers.readingStyle || '',
+			length: answers.length || '',
 		}, null, 2)}`;
 
 		const { parsed: parsed2, raw: raw2 } = await attemptModelCall(retryPrompt, 0.0);
@@ -521,10 +463,7 @@ app.get('/api/list', async (req, res) => {
 	}
 });
 
-
-/**
- * Start
- */
+// Start
 app.listen(PORT, () => {
 	console.log(`Server listening on http://localhost:${PORT}`);
 });
